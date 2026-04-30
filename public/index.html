@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DistroFS — Distributed File Upload</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #0a0e1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 28px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #1e2740;
+    }
+
+    .logo { display: flex; align-items: center; gap: 12px; }
+
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .logo-icon svg { width: 22px; height: 22px; }
+
+    .logo-text {
+      font-family: 'Space Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .logo-sub { font-size: 12px; color: #64748b; margin-top: 1px; }
+
+    .status-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .pill {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill-green { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-blue  { background: #0c1a2e; color: #60a5fa; border: 1px solid #1e40af; }
+    .pill-red   { background: #2d0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Stats Row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: #0f1629;
+      border: 1px solid #1e2740;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .stat-label { font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+    .stat-value { font-family: 'Space Mono', monospace; font-size: 22px; font-weight: 700; color: #f1f5f9; }
+    .stat-unit  { font-size: 12px; color: #64748b; font-family: 'DM Sans', sans-serif; font-weight: 400; margin-left: 2px; }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    /* ── Server Grid ── */
+    .server-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+    .server-card {
+      background: #0f1629;
+      border: 1px solid #1e2740;
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color .2s, transform .2s;
+    }
+
+    .server-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      border-radius: 12px 12px 0 0;
+    }
+
+    .s1::before { background: #3b82f6; }
+    .s2::before { background: #8b5cf6; }
+    .s3::before { background: #06b6d4; }
+
+    .server-card:hover { border-color: #2d3a5a; transform: translateY(-2px); }
+
+    .server-name {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .srv-stat { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-bottom: 4px; }
+    .srv-val  { color: #94a3b8; font-weight: 500; }
+
+    .bar-wrap { height: 4px; background: #1e2740; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 2px; transition: width .5s ease; }
+
+    /* ── Upload Zone ── */
+    .upload-zone {
+      background: #0f1629;
+      border: 2px dashed #1e2740;
+      border-radius: 16px;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+
+    .upload-zone:hover, .upload-zone.dragging {
+      border-color: #3b82f6;
+      background: #0d1e3a;
+    }
+
+    .upload-icon {
+      width: 64px; height: 64px;
+      background: #0d1e3a;
+      border: 1px solid #1e2740;
+      border-radius: 18px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+    }
+
+    .upload-icon svg { width: 30px; height: 30px; color: #3b82f6; }
+
+    .upload-title { font-size: 17px; font-weight: 600; color: #f1f5f9; margin-bottom: 6px; }
+    .upload-sub   { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+
+    .upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: background .2s;
+    }
+
+    .upload-btn:hover { background: #2563eb; }
+
+    input[type="file"] { display: none; }
+
+    /* ── Progress ── */
+    #progress-section { display: none; flex-direction: column; gap: 10px; }
+
+    .progress-item {
+      background: #0f1629;
+      border: 1px solid #1e2740;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .prog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .prog-name   { font-size: 13px; font-weight: 500; color: #f1f5f9; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prog-server { font-family: 'Space Mono', monospace; font-size: 11px; color: #3b82f6; }
+
+    .prog-bar-wrap { height: 4px; background: #1e2740; border-radius: 2px; overflow: hidden; }
+    .prog-bar { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius: 2px; width: 0%; transition: width .08s linear; }
+
+    .prog-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #64748b; }
+
+    /* ── File Table ── */
+    .files-table {
+      background: #0f1629;
+      border: 1px solid #1e2740;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .table-head {
+      display: grid;
+      grid-template-columns: 2.5fr 1fr 1fr 1.2fr 40px;
+      padding: 10px 16px;
+      background: #080d1a;
+      border-bottom: 1px solid #1e2740;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .table-row {
+      display: grid;
+      grid-template-columns: 2.5fr 1fr 1fr 1.2fr 40px;
+      padding: 11px 16px;
+      border-bottom: 1px solid #0d1224;
+      font-size: 13px;
+      align-items: center;
+      transition: background .15s;
+    }
+
+    .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: #0d1529; }
+
+    .f-name { color: #e2e8f0; font-weight: 500; display: flex; align-items: center; gap: 8px; overflow: hidden; }
+    .f-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fext { flex-shrink: 0; font-size: 10px; background: #1e2740; color: #64748b; padding: 2px 6px; border-radius: 4px; font-family: 'Space Mono', monospace; }
+
+    .f-size { color: #64748b; }
+    .f-server { font-family: 'Space Mono', monospace; font-size: 11px; }
+    .f-time { color: #475569; font-size: 11px; }
+
+    .c-s1 { color: #60a5fa; }
+    .c-s2 { color: #a78bfa; }
+    .c-s3 { color: #22d3ee; }
+
+    .del-btn {
+      background: none;
+      border: none;
+      color: #334155;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      transition: color .15s;
+      padding: 2px 6px;
+    }
+    .del-btn:hover { color: #ef4444; }
+
+    .empty-state { padding: 48px; text-align: center; color: #334155; font-size: 14px; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 999;
+      animation: fadeUp .3s ease;
+    }
+
+    .toast-ok  { background: #0f1629; border: 1px solid #166534; color: #4ade80; }
+    .toast-err { background: #0f1629; border: 1px solid #7f1d1d; color: #f87171; }
+
+    @keyframes fadeUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .stats-row   { grid-template-columns: repeat(2, 1fr); }
+      .server-grid { grid-template-columns: 1fr; }
+      .table-head,
+      .table-row   { grid-template-columns: 2fr 1fr 1fr 40px; }
+      .table-head > *:nth-child(4),
+      .table-row  > *:nth-child(4) { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 16 12 12 8 16"/>
+          <line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-text">DistroFS</div>
+        <div class="logo-sub">Distributed File System</div>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="pill pill-green" id="srv-status"><div class="dot"></div> 3 Servers Active</div>
+      <div class="pill pill-blue"  id="db-status"><div class="dot" style="background:#60a5fa"></div> MySQL Connected</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Files</div>
+      <div class="stat-value" id="st-files">0<span class="stat-unit">files</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Size</div>
+      <div class="stat-value" id="st-size">0<span class="stat-unit">MB</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Last Server</div>
+      <div class="stat-value" id="st-server" style="font-size:14px;padding-top:4px">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Algorithm</div>
+      <div class="stat-value" style="font-size:13px;padding-top:4px;color:#60a5fa">Round Robin</div>
+    </div>
+  </div>
+
+  <!-- Server Nodes -->
+  <div>
+    <div class="section-title">Server Nodes</div>
+    <div class="server-grid">
+      <div class="server-card s1">
+        <div class="server-name" style="color:#60a5fa">⬡ SERVER_01</div>
+        <div class="srv-stat"><span>Files</span><span class="srv-val" id="s1-c">0</span></div>
+        <div class="srv-stat"><span>Load</span><span class="srv-val" id="s1-l">0%</span></div>
+        <div class="bar-wrap"><div class="bar-fill" id="s1-b" style="background:#3b82f6;width:0%"></div></div>
+      </div>
+      <div class="server-card s2">
+        <div class="server-name" style="color:#a78bfa">⬡ SERVER_02</div>
+        <div class="srv-stat"><span>Files</span><span class="srv-val" id="s2-c">0</span></div>
+        <div class="srv-stat"><span>Load</span><span class="srv-val" id="s2-l">0%</span></div>
+        <div class="bar-wrap"><div class="bar-fill" id="s2-b" style="background:#8b5cf6;width:0%"></div></div>
+      </div>
+      <div class="server-card s3">
+        <div class="server-name" style="color:#22d3ee">⬡ SERVER_03</div>
+        <div class="srv-stat"><span>Files</span><span class="srv-val" id="s3-c">0</span></div>
+        <div class="srv-stat"><span>Load</span><span class="srv-val" id="s3-l">0%</span></div>
+        <div class="bar-wrap"><div class="bar-fill" id="s3-b" style="background:#06b6d4;width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div>
+    <div class="section-title">Upload Files</div>
+    <div class="upload-zone" id="drop-zone">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 16 12 12 8 16"/>
+          <line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+      </div>
+      <div class="upload-title">Drop files here to distribute</div>
+      <div class="upload-sub">Files akan didistribusikan ke server nodes menggunakan Round Robin</div>
+      <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Pilih File
+      </button>
+      <input type="file" id="file-input" multiple />
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-section"></div>
+
+  <!-- File Registry -->
+  <div>
+    <div class="section-title">File Registry</div>
+    <div class="files-table">
+      <div class="table-head">
+        <div>Filename</div>
+        <div>Size</div>
+        <div>Server</div>
+        <div>Upload Time</div>
+        <div></div>
+      </div>
+      <div id="file-list">
+        <div class="empty-state">Belum ada file. Upload sekarang!</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast toast-ok" id="toast">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+  <span id="toast-msg"></span>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────
+  let files = [];
+
+  // ── Helpers ────────────────────────────────────────
+  function fmtSize(bytes) {
+    if (bytes < 1024)            return bytes + ' B';
+    if (bytes < 1024 * 1024)     return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleString('id-ID', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  }
+
+  function getExt(name) {
+    const p = name.split('.');
+    return p.length > 1 ? p.pop().toUpperCase() : 'FILE';
+  }
+
+  function serverClass(server) {
+    if (server === 'server_1') return 'c-s1';
+    if (server === 'server_2') return 'c-s2';
+    return 'c-s3';
+  }
+
+  // ── Toast ──────────────────────────────────────────
+  let toastTimer;
+  function showToast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.className = 'toast ' + (isError ? 'toast-err' : 'toast-ok');
+    el.innerHTML = isError
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>${msg}</span>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${msg}</span>`;
+    el.style.display = 'flex';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.style.display = 'none', 3000);
+  }
+
+  // ── Update Stats & Server Bars ─────────────────────
+  function updateStats() {
+    document.getElementById('st-files').innerHTML =
+      files.length + '<span class="stat-unit"> files</span>';
+
+    const totalBytes = files.reduce((a, f) => a + (f.size || 0), 0);
+    document.getElementById('st-size').innerHTML =
+      (totalBytes / (1024 * 1024)).toFixed(2) + '<span class="stat-unit"> MB</span>';
+
+    const counts = { server_1: 0, server_2: 0, server_3: 0 };
+    files.forEach(f => { if (counts[f.server] !== undefined) counts[f.server]++; });
+    const max = files.length || 1;
+
+    [1, 2, 3].forEach(n => {
+      const srv = 'server_' + n;
+      const c   = counts[srv];
+      const pct = Math.round((c / max) * 100);
+      document.getElementById('s' + n + '-c').textContent = c;
+      document.getElementById('s' + n + '-l').textContent = pct + '%';
+      document.getElementById('s' + n + '-b').style.width = pct + '%';
+    });
+
+    if (files.length > 0) {
+      const last = files[0]; // DB returns DESC order
+      document.getElementById('st-server').textContent =
+        last.server.replace('_', ' ').toUpperCase();
+    }
+  }
+
+  // ── Render File Table ──────────────────────────────
+  function renderFiles() {
+    const list = document.getElementById('file-list');
+    if (!files.length) {
+      list.innerHTML = '<div class="empty-state">Belum ada file. Upload sekarang!</div>';
+      return;
+    }
+    list.innerHTML = files.map(f => {
+      const name     = f.originalname || f.filename;
+      const dispName = name.length > 32 ? name.substring(0, 32) + '…' : name;
+      const cls      = serverClass(f.server);
+      const time     = fmtTime(f.upload_time || Date.now());
+      return `
+        <div class="table-row">
+          <div class="f-name">
+            <span class="fext">${getExt(name)}</span>
+            <span title="${name}">${dispName}</span>
+          </div>
+          <div class="f-size">${fmtSize(f.size)}</div>
+          <div class="f-server ${cls}">${f.server}</div>
+          <div class="f-time">${time}</div>
+          <div>
+            <button class="del-btn" onclick="deleteFile(${f.id})" title="Hapus file">×</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Load Files from API ────────────────────────────
+  async function loadFiles() {
+    try {
+      const res  = await fetch('/files');
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      files = await res.json();
+      updateStats();
+      renderFiles();
+    } catch (err) {
+      console.error('loadFiles:', err);
+      showToast('Gagal memuat data dari server', true);
+    }
+  }
+
+  // ── Delete File ────────────────────────────────────
+  async function deleteFile(id) {
+    if (!confirm('Hapus file ini dari registry dan disk?')) return;
+    try {
+      const res = await fetch('/files/' + id, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      showToast('File berhasil dihapus');
+      loadFiles();
+    } catch {
+      showToast('Gagal menghapus file', true);
+    }
+  }
+
+  // ── Upload Files ───────────────────────────────────
+  async function handleUpload(selectedFiles) {
+    if (!selectedFiles.length) return;
+
+    const section = document.getElementById('progress-section');
+    section.style.display = 'flex';
+    section.style.flexDirection = 'column';
+    section.style.gap = '10px';
+    section.innerHTML = '';
+
+    // Create progress UI for each file
+    const progItems = Array.from(selectedFiles).map((file, i) => {
+      const pid = 'p' + Date.now() + i;
+      const el  = document.createElement('div');
+      el.className = 'progress-item';
+      el.innerHTML = `
+        <div class="prog-header">
+          <span class="prog-name">${file.name}</span>
+          <span class="prog-server">Uploading...</span>
+        </div>
+        <div class="prog-bar-wrap">
+          <div class="prog-bar" id="bar-${pid}"></div>
+        </div>
+        <div class="prog-footer">
+          <span id="status-${pid}">Mengirim ke server...</span>
+          <span id="pct-${pid}">0%</span>
+        </div>`;
+      section.appendChild(el);
+      return { pid, el };
+    });
+
+    // Fake progress animation while uploading
+    const intervals = progItems.map(({ pid }) => {
+      let pct = 0;
+      return setInterval(() => {
+        pct = Math.min(85, pct + Math.random() * 15);
+        const bar = document.getElementById('bar-' + pid);
+        const lbl = document.getElementById('pct-' + pid);
+        if (bar) bar.style.width = Math.round(pct) + '%';
+        if (lbl) lbl.textContent = Math.round(pct) + '%';
+      }, 120);
+    });
+
+    try {
+      const formData = new FormData();
+      Array.from(selectedFiles).forEach(f => formData.append('files', f));
+
+      const res  = await fetch('/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Upload gagal: ' + res.status);
+      const data = await res.json();
+
+      // Complete all bars
+      intervals.forEach(clearInterval);
+      progItems.forEach(({ pid }, i) => {
+        const bar    = document.getElementById('bar-' + pid);
+        const lbl    = document.getElementById('pct-' + pid);
+        const status = document.getElementById('status-' + pid);
+        const srv    = data.files && data.files[i] ? data.files[i].server : 'server';
+        if (bar)    bar.style.width = '100%';
+        if (lbl)    lbl.textContent = '100%';
+        if (status) status.textContent = 'Disimpan ke ' + srv;
+      });
+
+      showToast(data.count + ' file berhasil didistribusikan!');
+      await loadFiles();
+
+    } catch (err) {
+      intervals.forEach(clearInterval);
+      console.error(err);
+      showToast('Upload gagal. Cek koneksi server.', true);
+    }
+
+    setTimeout(() => {
+      section.style.display = 'none';
+      section.innerHTML = '';
+    }, 2200);
+  }
+
+  // ── File Input ─────────────────────────────────────
+  document.getElementById('file-input').addEventListener('change', function () {
+    if (this.files.length) {
+      handleUpload(this.files);
+      this.value = '';
+    }
+  });
+
+  // ── Drag & Drop ────────────────────────────────────
+  const zone = document.getElementById('drop-zone');
+
+  zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    zone.classList.add('dragging');
+  });
+
+  zone.addEventListener('dragleave', e => {
+    if (!zone.contains(e.relatedTarget)) zone.classList.remove('dragging');
+  });
+
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragging');
+    if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files);
+  });
+
+  // ── Init ───────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', loadFiles);
+</script>
+</body>
+</html>
