@@ -74,20 +74,32 @@ const upload = multer({ storage });
 
 // POST /upload
 app.post('/upload', upload.array('files'), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada file' });
+  }
+
   const inserted = [];
+  let done = 0;
+  const total = req.files.length;
 
   req.files.forEach((file) => {
     const serverFolder = path.basename(path.dirname(file.path));
     const sql = `INSERT INTO files (filename, originalname, size, server) VALUES (?, ?, ?, ?)`;
-    db.query(sql, [file.filename, file.originalname, file.size, serverFolder],
-      (err, result) => {
-        if (err) console.error(err);
-        else inserted.push({ id: result.insertId, server: serverFolder });
-      }
-    );
-  });
 
-  res.json({ success: true, count: req.files.length, files: inserted });
+    db.query(sql, [file.filename, file.originalname, file.size, serverFolder], (err, result) => {
+      if (err) {
+        console.error('DB insert error:', err);
+      } else {
+        inserted.push({ id: result.insertId, server: serverFolder });
+      }
+
+      done++;
+      // ✅ Baru kirim response setelah SEMUA file selesai di-insert
+      if (done === total) {
+        res.json({ success: true, count: total, files: inserted });
+      }
+    });
+  });
 });
 
 // GET /files
